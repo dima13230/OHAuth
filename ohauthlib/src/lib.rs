@@ -2,6 +2,7 @@ use rand::Rng;
 use std::char::MAX;
 use std::collections::btree_map::Range;
 use std::env;
+use std::fmt::format;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -33,9 +34,10 @@ struct BoardResponse {
     challenge: String
 }
 
-pub enum AuthResult {
+pub enum OHAuthResult {
     Success,
-    Failure(String),
+    NotRegistered,
+    Error(String),
 }
 
 const BOARDS_JSON_FILENAME: &str = "regbs";
@@ -44,17 +46,21 @@ const USB_PRODUCT_NAME: &str = "OHAuth_Key";
 const AES_KEY: &str = "OHAuthDefaultAES";
 const XOR_KEY: &str = "OHAuthDefaultXOR";
 const JSON_KEY: &str = "OHAuthDefaultJSONKey";
-const MAX_READ_ATTEMPTS: u8 = 5;
 
-pub fn attempt_auth() -> AuthResult {
+pub fn register() -> OHAuthResult {
+    // TODO
+    OHAuthResult::Success
+}
+
+pub fn authorize() -> OHAuthResult {
     let boards_json_path = Path::new(BOARDS_JSON_FILENAME);
-    let mut auth_boards: AuthorizedBoards;
+    let mut auth_boards: AuthorizedBoards = AuthorizedBoards { boards: vec![] };
 
     if boards_json_path.exists() {
         let mut file = match File::open(&boards_json_path) {
             Err(why) => {
-                return AuthResult::Failure(
-                    "Registered boards file exists but opening it wasn't successful.".to_string(),
+                return OHAuthResult::Error(
+                    format!("Registered boards file exists but opening it wasn't successful. {}", why),
                 )
             }
             Ok(file) => file,
@@ -63,7 +69,7 @@ pub fn attempt_auth() -> AuthResult {
         let mut boards_raw: Vec<u8> = vec![];
         match file.read_to_end(&mut boards_raw) {
             Err(why) => {
-                return AuthResult::Failure("Couldn't read registered boards file.".to_string())
+                return OHAuthResult::Error(format!("Couldn't read registered boards file. {}", why))
             }
             Ok(_) => println!("{} exists and is readable.", BOARDS_JSON_FILENAME),
         }
@@ -77,9 +83,7 @@ pub fn attempt_auth() -> AuthResult {
 
         auth_boards = serde_json::from_slice(&boards_raw_generic.as_slice()).unwrap();
     } else {
-        //return AuthResult::Failure(
-        //    "Registered boards file doesn't exist. Register any board first.".to_string(),
-        //);
+        return OHAuthResult::NotRegistered;
     }
 
     // prepare AES256 cipher
@@ -96,7 +100,7 @@ pub fn attempt_auth() -> AuthResult {
         .match_property("ID_MODEL", USB_PRODUCT_NAME)
         .expect("Failed to set ID_MODEL filter");
 
-    'outer: for device in enumerator.scan_devices().unwrap() {
+    for device in enumerator.scan_devices().unwrap() {
         println!("{}", device.devnode().unwrap().to_str().unwrap());
         let mut port = serialport::new(device.devnode().unwrap().to_str().unwrap(), 115200)
             .timeout(Duration::from_secs(15))
@@ -108,52 +112,36 @@ pub fn attempt_auth() -> AuthResult {
 
         std::thread::sleep(std::time::Duration::from_secs(2));
 
-        if (!exchange_challenge(&mut port, &cipher)) {
-            return AuthResult::Failure("Challenge test not passed.".to_string())
+        let board_hash: String;
+        match exchange_challenge(&mut port, &cipher) {
+            Ok(string) => board_hash = string,
+            Err(e) => return OHAuthResult::Error(format!("Challenge test not passed. {}", e))
         }
-
-        //let mut attempt: u8 = 0;
-        /*loop {
-            let available_bytes: u32 = port.bytes_to_read().expect("Failed to read buff size");
-            if available_bytes > 0 {
-                break;
+        
+        for board in &auth_boards.boards {
+            if board_hash.eq(board) {
+                return OHAuthResult::Success
             }
-
-            // Number of attempts exceeded. Try other port, if any
-            if attempt == MAX_READ_ATTEMPTS {
-                continue 'outer;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(1000));
-            println!("No data");
-            attempt += 1;
-        }*/
-
-        let mut serial_buf = vec![0; 1000];
-        port.read(&mut serial_buf).unwrap();
-
-        let mut string = match String::from_utf8(serial_buf) {
-            Ok(v) => v,
-            Err(e) => panic!("{}", e),
-        };
-        string = string.trim_matches(char::from(0)).to_owned();
-        println!("{}", string);
+        }
     }
-    return AuthResult::Failure("No functional OHAuth keys are connected to this device.".to_string());
+    return OHAuthResult::Error("No functional OHAuth keys are connected to this device.".to_string());
 }
 
-fn exchange_challenge(port: &mut TTYPort, cipher: &Aes256) -> Result<String> {
+fn exchange_challenge(port: &mut TTYPort, cipher: &Aes256) -> serialport::Result<String> {
     let mut rng = rand::thread_rng();
 
+    // Generate random challenge value that is string made of random printable characters
     let mut challenge: [u8; 32] = [0; 32];
     for i in 0..32 {
         let char = char::from_u32(rng.gen_range(32..127)).unwrap();
         challenge[i] = char as u8;
     }
+
+    // TODO: Encrypt challenge    
     
-    transform_challenge(&mut challenge, XOR_KEY.as_bytes());
     match port.write(&challenge) {
         Ok(_) => (),
-        Err(_) => return Err(_)
+        Err(e) => return Err(e.into())
     }
     
     // Read response with hash and challenge value as AES256 encrypted JSON
@@ -164,6 +152,12 @@ fn exchange_challenge(port: &mut TTYPort, cipher: &Aes256) -> Result<String> {
     cipher.decrypt_block(&mut response);
 
     let response_json: BoardResponse = serde_json::from_slice(&response).unwrap();
+
+    // Now transform challenge on our side and compare
+    transform_challenge(&mut challenge, XOR_KEY.as_bytes());
+    if response_json.challenge.as_bytes() != challenge {
+        return Err(serialport::Error::new(ErrorKind::InvalidInput, "Challenge values do not match"))
+    }
 
     Ok(response_json.hash)
 }

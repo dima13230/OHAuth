@@ -3,13 +3,6 @@
 version = 3
 
 [[package]]
-name = "ArduinoKeyAuthSoft"
-version = "0.1.0"
-dependencies = [
- "ohauthlib",
-]
-
-[[package]]
 name = "CoreFoundation-sys"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -228,6 +221,13 @@ dependencies = [
  "serialport",
  "sha2",
  "udev",
+]
+
+[[package]]
+name = "ohauthlib-testapp"
+version = "0.1.0"
+dependencies = [
+ "ohauthlib",
 ]
 
 [[package]]
