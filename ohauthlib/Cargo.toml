@@ -1,0 +1,18 @@
+[package]
+name = "ohauthlib"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+aes = "0.8.2"
+serde = { version = "1.0.164", features = ["derive"] }
+serde_json = "1.0.96"
+serialport = "4.0.0"
+sha2 = "0.10.6"
+generic-array = "0.14.7"
+rand_core = "0.6.4"
+getrandom = "0.2.10"
+rand = "0.8.5"
+udev = "0.7.0"

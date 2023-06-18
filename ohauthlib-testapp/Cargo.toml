@@ -1,0 +1,7 @@
+[package]
+name = "ohauthlib-testapp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ohauthlib = { path = "../ohauthlib" }

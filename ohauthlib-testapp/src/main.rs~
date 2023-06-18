@@ -1,0 +1,6 @@
+extern crate ohauthlib;
+
+fn main() {
+    let result = ohauthlib::attempt_auth();
+}
+
