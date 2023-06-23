@@ -137,9 +137,11 @@ fn exchange_challenge(port: &mut TTYPort, cipher: &Aes256) -> serialport::Result
         challenge[i] = char as u8;
     }
 
-    // TODO: Encrypt challenge    
+    // Encrypt challenge
+    let mut challenge_enc = GenericArray::clone_from_slice(&challenge);
+    cipher.encrypt_block(&mut challenge_enc);
     
-    match port.write(&challenge) {
+    match port.write(&challenge_enc) {
         Ok(_) => (),
         Err(e) => return Err(e.into())
     }
@@ -153,7 +155,7 @@ fn exchange_challenge(port: &mut TTYPort, cipher: &Aes256) -> serialport::Result
 
     let response_json: BoardResponse = serde_json::from_slice(&response).unwrap();
 
-    // Now transform challenge on our side and compare
+    // Now transform challenge and compare
     transform_challenge(&mut challenge, XOR_KEY.as_bytes());
     if response_json.challenge.as_bytes() != challenge {
         return Err(serialport::Error::new(ErrorKind::InvalidInput, "Challenge values do not match"))
