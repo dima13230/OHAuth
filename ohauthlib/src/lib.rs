@@ -223,7 +223,7 @@ fn exchange_challenge(port: &mut TTYPort, cipher: &Aes256) -> serialport::Result
     };
     
     // Read response with hash and challenge value as AES256 encrypted JSON
-    let mut serial_buf = [0u8; 1000];
+    let mut serial_buf = [0u8; 1024];
     port.read(&mut serial_buf).unwrap();
 
     let mut response = GenericArray::clone_from_slice(&serial_buf);

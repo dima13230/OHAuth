@@ -8,8 +8,11 @@
 #define HASH_SIZE 32
 #define BLOCK_SIZE 64
 
-const char* secret_key = "OHAuthDefaultKey";
-const char* keyword_auth_request = "OHAuthreq";
+
+const char* AES_KEY = "OHAuthDefaultAES";
+const char* XOR_KEY = "OHAuthDefaultXOR";
+
+AES256 aes256;
 
 UUID uuid;
 char* ID;
@@ -40,6 +43,12 @@ char* readStringFromEEPROM(int addrOffset)
 }
 // EEPROM END
 
+void transformChallenge(byte* challenge, size_t length) {
+  for (size_t i = 0; i < length; i++) {
+    challenge[i] ^= XOR_KEY[i % sizeof(XOR_KEY)];
+  }
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -60,16 +69,13 @@ void setup() {
 }
 
 void loop() {
+  char buffer[1024];
   if (Serial.available() > 0)
   {
-    // strcat
     String data = Serial.readString();
-    if (data == keyword_auth_request)
-    {
-      char result[HASH_SIZE];
-      hmac<SHA256>(result, HASH_SIZE, secret_key, strlen(secret_key),
-          ID, strlen(ID));
-      Serial.println(result);
-    }
+    aes256.setKey(AES_KEY, aes256.keySize());
+    aes256.decryptBlock(buffer, data.c_str());
+    
+    transformChallenge(buffer, strlen(buffer));
   }
 }
