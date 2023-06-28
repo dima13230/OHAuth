@@ -4,6 +4,7 @@
 #include <string.h>
 #include <EEPROM.h>
 #include "UUID.h"
+#include <ArduinoJson.h>
 
 #define HASH_SIZE 32
 #define BLOCK_SIZE 64
@@ -13,9 +14,13 @@ const char* AES_KEY = "OHAuthDefaultAES";
 const char* XOR_KEY = "OHAuthDefaultXOR";
 
 AES256 aes256;
+SHA256 sha256;
 
 UUID uuid;
 char* ID;
+
+char challenge[32];
+char hash[32];
 
 // EEPROM BEGIN
 void writeStringToEEPROM(int addrOffset, const char *strToWrite)
@@ -65,17 +70,24 @@ void setup() {
     uuid.generate();
     ID = uuid.toCharArray();
     writeStringToEEPROM(0, ID);
+
+    sha256.reset();
+    sha256.update(&ID, strlen(ID));
+    sha256.finalize(&hash, HASH_SIZE);
   }
 }
 
 void loop() {
-  char buffer[1024];
   if (Serial.available() > 0)
   {
     String data = Serial.readString();
     aes256.setKey(AES_KEY, aes256.keySize());
-    aes256.decryptBlock(buffer, data.c_str());
+    aes256.decryptBlock(challenge, data.c_str());
     
-    transformChallenge(buffer, strlen(buffer));
+    transformChallenge(challenge, strlen(challenge));
+    
+    StaticJsonDocument<512> doc;
+    doc["challenge"] = challenge;
+    doc["hash"] = hash;
   }
 }

@@ -43,7 +43,8 @@ pub fn register() -> OHAuthResult {
     let mut auth_boards: AuthorizedBoards = AuthorizedBoards { boards: vec![] };
 
     let key_bytes_json = JSON_KEY.as_bytes();
-    let key_json = GenericArray::clone_from_slice(key_bytes_json);
+    let key_len = key_bytes_json.len();
+    let key_json = GenericArray::clone_from_slice(&key_bytes_json[0..key_len]);
 
     let cipher_json = Aes256::new(&key_json);
     if auth_boards_json_path.exists() {
