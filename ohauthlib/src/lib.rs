@@ -26,6 +26,7 @@ struct BoardResponse {
 
 pub enum OHAuthResult {
     Success,
+    AlreadyRegistered,
     NotRegistered,
     Error(String),
 }
@@ -92,7 +93,7 @@ pub fn register() -> OHAuthResult {
         .match_property("ID_MODEL", USB_PRODUCT_NAME)
         .expect("Failed to set ID_MODEL filter");
 
-    for device in enumerator.scan_devices().unwrap() {
+    'devices_loop: for device in enumerator.scan_devices().unwrap() {
         println!("{}", device.devnode().unwrap().to_str().unwrap());
         let mut port = serialport::new(device.devnode().unwrap().to_str().unwrap(), 115200)
             .timeout(Duration::from_secs(15))
@@ -110,6 +111,12 @@ pub fn register() -> OHAuthResult {
             Err(why) => return OHAuthResult::Error(format!("Challenge test not passed. {}", why))
         };
         
+
+        for board in &auth_boards.boards {
+            if board_hash.eq(board) {
+                continue 'devices_loop;
+            }
+        }
         auth_boards.boards.push(board_hash);
         let auth_boards_json = match serde_json::to_string(&auth_boards) {
             Ok(string) => string,
@@ -124,7 +131,7 @@ pub fn register() -> OHAuthResult {
             Err(why) => return OHAuthResult::Error(format!("Couldn't write to registered boards file! {}", why))
         };
     }
-    OHAuthResult::Error("No functional OHAuth keys are connected to this device.".to_string())
+    OHAuthResult::AlreadyRegistered
 }
 
 pub fn authorize() -> OHAuthResult {
